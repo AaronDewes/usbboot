@@ -39,6 +39,7 @@ char * metadata_path = NULL;
 char pathname[18] = {0};
 char * targetpathname = NULL;
 uint8_t targetPortNo = 99;
+int max_transfer_size = 16 * 1024;
 
 int out_ep;
 int in_ep;
@@ -89,6 +90,7 @@ void usage(int error)
 	fprintf(dest, "        -p [pathname]    : Only look for CM with USB pathname\n");
 	fprintf(dest, "        -i [serialno]    : Only look for a Raspberry Pi Device with a given serialno\n");
 	fprintf(dest, "        -j [path]        : Write metadata JSON object to a file at the given path (BCM2712/2711)\n");
+	fprintf(dest, "        --max-transfer-size [size] : Set the maximum USB transfer size in bytes (default 16384)\n");
 	fprintf(dest, "        -h               : This help\n");
 
 	exit(error ? -1 : 0);
@@ -433,8 +435,6 @@ int Initialize_Device(libusb_context ** ctx, libusb_device_handle ** usb_device)
 	return ret;
 }
 
-#define LIBUSB_MAX_TRANSFER (16 * 1024)
-
 int ep_write(void *buf, int len, libusb_device_handle * usb_device)
 {
 	int a_len = 0;
@@ -451,7 +451,7 @@ int ep_write(void *buf, int len, libusb_device_handle * usb_device)
 
 	while(len > 0)
 	{
-		sending = len < LIBUSB_MAX_TRANSFER ? len : LIBUSB_MAX_TRANSFER;
+		sending = len < max_transfer_size ? len : max_transfer_size;
 		ret = libusb_bulk_transfer(usb_device, out_ep, buf, sending, &sent, 5000);
 		if (ret)
 			break;
@@ -495,6 +495,13 @@ void get_options(int argc, char *argv[])
 			if(argc < 1)
 				usage(1);
 			directory = *argv;
+		}
+		if(strcmp(*argv, "--max-transfer-size") == 0)
+		{
+			argv++; argc--;
+			if(argc < 1)
+				usage(1);
+			max_transfer_size = atoi(*argv);
 		}
 		else if(strcmp(*argv, "-p") == 0)
 		{
@@ -952,7 +959,7 @@ int file_server(libusb_device_handle * usb_device)
 
 					if(sz != file_size)
 					{
-						printf("Failed to write complete file to USB device\n");
+						printf("Failed to write complete file to USB device. Expected %d, sent %d\n", file_size, sz);
 						return -1;
 					}
 				}
